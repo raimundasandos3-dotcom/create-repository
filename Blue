@@ -1,0 +1,292 @@
+--- package.json ---
+{
+  "name": "blue-lock-pause-game",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.14",
+    "postcss": "^8.4.24",
+    "tailwindcss": "^3.4.5",
+    "vite": "^5.0.0",
+    "@vitejs/plugin-react": "^4.0.0"
+  }
+}
+
+--- vite.config.js ---
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [react()]
+})
+
+--- postcss.config.cjs ---
+module.exports = {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {}
+  }
+}
+
+--- tailwind.config.cjs ---
+module.exports = {
+  content: ['./index.html', './src/**/*.{js,jsx}'],
+  theme: {
+    extend: {}
+  },
+  plugins: []
+}
+
+--- public/index.html ---
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Blue Lock — Jogo Pause</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
+
+--- src/main.jsx ---
+import React from 'react'
+import { createRoot } from 'react-dom/client'
+import App from './App'
+import './index.css'
+
+createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+)
+
+--- src/index.css ---
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  @apply bg-slate-900;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+}
+
+--- src/App.jsx ---
+import React from 'react'
+import BlueLockPauseGame from './components/BlueLock_PauseGame'
+
+export default function App(){
+  return (
+    <div className="min-h-screen flex items-center justify-center p-6">
+      <BlueLockPauseGame />
+    </div>
+  )
+}
+
+--- src/components/BlueLock_PauseGame.jsx ---
+/*
+Blue Lock — Jogo Pause (em Português)
+Componente React pronto para uso. Estilizado com Tailwind.
+- Pressione PAUSE quando a barra estiver dentro da zona alvo para pontuar.
+- Pontuação por precisão, barra de stamina, rounds com aumento de velocidade.
+*/
+
+import React, { useEffect, useRef, useState } from "react";
+
+export default function BlueLockPauseGame() {
+  const [running, setRunning] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [score, setScore] = useState(0);
+  const [stamina, setStamina] = useState(100);
+  const [round, setRound] = useState(1);
+  const [speed, setSpeed] = useState(1);
+  const [pos, setPos] = useState(0);
+  const dirRef = useRef(1);
+  const animRef = useRef(null);
+  const lastTimestamp = useRef(null);
+  const target = useRef({ start: 42, end: 58 });
+
+  function startGame() {
+    setScore(0);
+    setStamina(100);
+    setRound(1);
+    setSpeed(1);
+    setPos(0);
+    dirRef.current = 1;
+    setRunning(true);
+    setPaused(false);
+    lastTimestamp.current = null;
+  }
+
+  function resetGame() {
+    setRunning(false);
+    setPaused(false);
+    setScore(0);
+    setStamina(100);
+    setRound(1);
+    setSpeed(1);
+    setPos(0);
+    dirRef.current = 1;
+    cancelAnimationFrame(animRef.current);
+  }
+
+  function pauseAction() {
+    if (!running || paused) return;
+    setPaused(true);
+    const mid = (target.current.start + target.current.end) / 2;
+    const distance = Math.abs(pos - mid);
+    const precision = Math.max(0, Math.round((1 - distance / 50) * 100));
+    const inside = pos >= target.current.start && pos <= target.current.end;
+    if (inside) {
+      const gained = Math.round(precision * (1 + speed * 0.1));
+      setScore((s) => s + gained);
+      setStamina((st) => Math.min(100, st + 5));
+    } else {
+      setStamina((st) => Math.max(0, st - 12));
+    }
+
+    setTimeout(() => {
+      setPaused(false);
+      if (stamina <= 0) {
+        setRunning(false);
+        cancelAnimationFrame(animRef.current);
+        return;
+      }
+      setRound((r) => r + 1);
+      setSpeed((sp) => sp + 0.2);
+      const shrink = Math.max(6, target.current.end - target.current.start - 2);
+      const center = (target.current.start + target.current.end) / 2;
+      const half = Math.max(6, shrink / 2 - 1);
+      target.current.start = center - half;
+      target.current.end = center + half;
+    }, 700);
+  }
+
+  useEffect(() => {
+    if (!running) return;
+    function step(ts) {
+      if (!lastTimestamp.current) lastTimestamp.current = ts;
+      const dt = (ts - lastTimestamp.current) / 1000;
+      lastTimestamp.current = ts;
+      if (!paused) {
+        const rangeSpeed = 30 + speed * 20;
+        let next = pos + dirRef.current * rangeSpeed * dt;
+        if (next >= 100) { next = 100; dirRef.current = -1; }
+        else if (next <= 0) { next = 0; dirRef.current = 1; }
+        setPos(next);
+      }
+      animRef.current = requestAnimationFrame(step);
+    }
+    animRef.current = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(animRef.current);
+  }, [running, paused, speed, pos]);
+
+  useEffect(() => {
+    if (stamina <= 0) {
+      setRunning(false);
+      setPaused(false);
+      cancelAnimationFrame(animRef.current);
+    }
+  }, [stamina]);
+
+  function precisionLabel() {
+    const mid = (target.current.start + target.current.end) / 2;
+    const distance = Math.abs(pos - mid);
+    if (distance < 2) return "PERFEITO";
+    if (distance < 6) return "ÓTIMO";
+    if (distance < 12) return "BOM";
+    return "RUIM";
+  }
+
+  return (
+    <div className="max-w-3xl mx-auto p-6 bg-gradient-to-b from-blue-900 via-blue-800 to-sky-900 rounded-2xl shadow-2xl text-slate-50">
+      <header className="flex items-center justify-between mb-4">
+        <div>
+          <h1 className="text-2xl font-extrabold">Blue Lock — Jogo Pause</h1>
+          <p className="text-sm opacity-80">Pressione <span className="font-bold">PAUSE</span> quando a barra estiver dentro da zona alvo.</p>
+        </div>
+        <div className="text-right">
+          <div className="text-xs opacity-80">Round</div>
+          <div className="text-lg font-bold">{round}</div>
+        </div>
+      </header>
+
+      <div className="bg-white/5 rounded-xl p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="space-y-1">
+            <div className="text-xs opacity-80">Pontuação</div>
+            <div className="text-xl font-bold">{score}</div>
+          </div>
+
+          <div className="space-y-1 text-right">
+            <div className="text-xs opacity-80">Stamina</div>
+            <div className="w-40 h-3 bg-white/10 rounded-full overflow-hidden">
+              <div className={`h-full rounded-full transition-all duration-300`} style={{ width: `${stamina}%`, background: 'linear-gradient(90deg,#60a5fa,#1e3a8a)'}} />
+            </div>
+          </div>
+        </div>
+
+        <div className="relative h-28 bg-white/3 rounded-lg p-4 flex items-center">
+          <div className="absolute left-0 right-0 h-full flex items-center justify-center pointer-events-none">
+            <div className="relative w-full max-w-2xl" style={{ height: 8 }}>
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full h-2 bg-white/10 rounded" />
+              </div>
+
+              <div className="absolute top-0 h-2 rounded" style={{ left: `${target.current.start}%`, width: `${target.current.end - target.current.start}%`, background: 'linear-gradient(90deg,#0ea5e9,#083e85)', boxShadow: '0 0 12px rgba(14,165,233,0.35)'}} />
+
+              <div className="absolute -top-3 w-6 h-8 rounded-md flex items-center justify-center text-xs font-bold" style={{ left: `calc(${pos}% - 1.5rem)`, background: 'linear-gradient(180deg,#60a5fa,#0ea5e9)', boxShadow: '0 6px 18px rgba(14,165,233,0.35)'}}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2v20" stroke="#072554" strokeWidth="1.5" strokeLinecap="round" /><circle cx="12" cy="12" r="3" fill="#072554" /></svg>
+              </div>
+            </div>
+          </div>
+
+          <div className="ml-auto mr-2 text-sm text-right opacity-80">
+            <div>{precisionLabel()}</div>
+            <div className="text-xs">Velocidade: {speed.toFixed(1)}</div>
+          </div>
+        </div>
+
+        <div className="mt-4 flex items-center justify-between">
+          <div className="flex gap-3">
+            {!running ? (
+              <button onClick={startGame} className="px-4 py-2 bg-sky-500 hover:bg-sky-600 rounded-lg font-semibold">Iniciar</button>
+            ) : (
+              <>
+                <button onClick={pauseAction} disabled={!running || paused} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg font-semibold disabled:opacity-50">PAUSE</button>
+                <button onClick={() => { setRunning(false); setPaused(false); cancelAnimationFrame(animRef.current); }} className="px-4 py-2 bg-amber-500 hover:bg-amber-600 rounded-lg font-semibold">Parar</button>
+              </>
+            )}
+
+            <button onClick={resetGame} className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg">Reset</button>
+          </div>
+
+          <div className="text-sm text-right opacity-90">
+            <div className="text-xs">Dica:</div>
+            <div className="font-medium">Quanto mais preciso, mais pontos — mantenha a stamina para jogar mais rounds.</div>
+          </div>
+        </div>
+
+        <footer className="mt-6 flex items-center justify-between opacity-90 text-xs">
+          <div>Blue Lock — Treino de Instintos</div>
+          <div>Desenvolvido por você x ChatGPT</div>
+        </footer>
+      </div>
+    </div>
+  );
+}
